@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snapchat Clone Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Leaflet Maps API -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --snap-yellow: #FFFC00;
+            --snap-blue: #00ADEE;
+            --snap-red: #FF0045;
+            --snap-purple: #9B51E0;
+        }
+
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        
+        /* Layout Screens */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: calc(100% - 70px);
+            background: #fff;
+            display: none;
+            flex-direction: column;
+            z-index: 10;
+        }
+        .screen.active { display: flex; }
+
+        /* Map Styling */
+        #map-container { height: 100%; width: 100%; background: #aad3df; }
+        
+        .recenter-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            cursor: pointer;
+            color: var(--snap-blue);
+            font-size: 20px;
+        }
+
+        /* Camera Styling */
+        #camera-stream { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Icons */
+        .snap-status-icon {
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+        }
+
+        .icon-sent-snap {
+            width: 0; 
+            height: 0; 
+            border-top: 7px solid transparent;
+            border-bottom: 7px solid transparent;
+            border-left: 10px solid var(--snap-red);
+        }
+
+        .icon-received-snap {
+            background: var(--snap-red);
+            border-radius: 3px;
+        }
+
+        /* Nav Bar */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            height: 70px;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 100;
+        }
+        .nav-item { color: #777; font-size: 24px; cursor: pointer; transition: 0.2s; }
+        .nav-item.active { color: white; }
+
+        /* Preview Overlay */
+        #preview-overlay {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 200;
+            display: none;
+        }
+        #preview-overlay img { width: 100%; height: 100%; object-fit: cover; }
+
+        #snap-text-display {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 100%;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            display: none;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        #text-input-container {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #snap-text-input {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 24px;
+            text-align: center;
+            width: 90%;
+            outline: none;
+            font-weight: bold;
+        }
+
+        /* Send To Screen */
+        #send-to-screen {
+            position: fixed;
+            inset: 0;
+            background: #f7f7f7;
+            z-index: 400;
+            display: none;
+            flex-direction: column;
+        }
+
+        .friend-row {
+            padding: 12px 20px;
+            background: white;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+        }
+
+        .check-circle {
+            margin-left: auto;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #ddd;
+            border-radius: 50%;
+        }
+
+        .friend-row.selected .check-circle {
+            background: var(--snap-blue);
+            border-color: var(--snap-blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .friend-row.selected .check-circle::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+        }
+
+        /* Viewing Overlay */
+        #viewing-overlay {
+            position: fixed;
+            inset: 0;
+            background: black;
+            z-index: 500;
+            display: none;
+        }
+        #viewing-overlay img { width: 100%; height: 100%; object-fit: cover; }
+
+        .close-btn {
+            position: absolute;
+            top: 25px;
+            left: 20px;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            z-index: 210;
+        }
+
+        .capture-btn {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            border: 6px solid white;
+            border-radius: 50%;
+            z-index: 20;
+            cursor: pointer;
+        }
+
+        /* Chat bubbles */
+        .chat-bubble {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 18px;
+            margin-bottom: 4px;
+            font-size: 15px;
+            word-wrap: break-word;
+        }
+        .chat-bubble.mine {
+            align-self: flex-end;
+            background-color: var(--snap-blue);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-bubble.theirs {
+            align-self: flex-start;
+            background-color: #f1f1f1;
+            color: black;
+            border-bottom-left-radius: 4px;
+        }
+
+        #toast-sent {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--snap-blue);
+            color: white;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: bold;
+            z-index: 600;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toast-sent">Sent!</div>
+
+    <!-- Camera Screen -->
+    <div id="camera-screen" class="screen active">
+        <video id="camera-stream" autoplay playsinline muted></video>
+        <div class="capture-btn" onclick="takePhoto()"></div>
+    </div>
+
+    <!-- Map Screen -->
+    <div id="map-screen" class="screen">
+        <div id="map-container"></div>
+        <div class="recenter-btn" onclick="recenterMap()">
+            <i class="fa-solid fa-location-crosshairs"></i>
+        </div>
+    </div>
+
+    <!-- Chat Screen -->
+    <div id="chat-screen" class="screen bg-white">
+        <div class="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-20">
+            <div class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><i class="fa-solid fa-user text-gray-400 text-sm"></i></div>
+            <h1 class="text-lg font-bold">Chat</h1>
+            <i class="fa-solid fa-comment-medical text-blue-400 text-xl"></i>
+        </div>
+        <div id="chat-list" class="flex-1 overflow-y-auto">
+            <!-- Dynamic chats appear here -->
+        </div>
+
+        <!-- Conversation Overlay -->
+        <div id="conversation-view" class="absolute inset-0 bg-white z-30 hidden flex-col">
+            <div class="p-4 border-b flex items-center gap-4">
+                <i class="fa-solid fa-chevron-left text-xl cursor-pointer text-blue-400" onclick="closeConversation()"></i>
+                <div class="font-bold" id="chat-header-name">Friend</div>
+            </div>
+            <div id="message-container" class="flex-1 p-4 flex flex-col overflow-y-auto"></div>
+            <div class="p-3 border-t flex gap-2 items-center">
+                <div class="bg-gray-100 rounded-full flex-1 flex items-center px-4 py-2">
+                    <input id="msg-input" type="text" placeholder="Send a chat" class="bg-transparent flex-1 focus:outline-none">
+                </div>
+                <button onclick="sendMessage()" class="text-blue-500 font-bold px-2">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PREVIEW OVERLAY -->
+    <div id="preview-overlay">
+        <div class="close-btn" onclick="closePreview()"><i class="fa-solid fa-xmark"></i></div>
+        <div class="absolute top-8 right-6 flex flex-col gap-6 text-white text-2xl z-20">
+            <i class="fa-solid fa-font cursor-pointer" onclick="showTextInput()"></i>
+            <i class="fa-solid fa-pencil"></i>
+            <i class="fa-solid fa-note-sticky"></i>
+            <i class="fa-solid fa-music"></i>
+        </div>
+        <img id="preview-img" src="">
+        <div id="snap-text-display"></div>
+        <div class="absolute bottom-10 right-6 z-20">
+            <button onclick="showSendToScreen()" class="bg-[#FFFC00] px-8 py-3 rounded-full font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-transform">
+                Send To <i class="fa-solid fa-chevron-right text-sm"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Text Input Modal -->
+    <div id="text-input-container" onclick="hideTextInput(event)">
+        <input type="text" id="snap-text-input" placeholder="Type something..." maxlength="50" autocomplete="off">
+    </div>
+
+    <!-- SEND TO SCREEN -->
+    <div id="send-to-screen">
+        <div class="p-5 bg-white flex items-center border-b">
+            <i class="fa-solid fa-chevron-left text-xl mr-5 cursor-pointer" onclick="hideSendToScreen()"></i>
+            <h2 class="text-xl font-bold">Send To...</h2>
+        </div>
+        <div class="flex-1 overflow-y-auto p-2">
+            <div class="px-4 py-2 uppercase text-xs font-bold text-gray-500 tracking-widest">Recents</div>
+            <div class="friend-row rounded-xl mb-1" onclick="toggleFriendSelection(this, 'Team Snapchat')">
+                <div class="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center"><i class="fa-solid fa-ghost text-blue-500"></i></div>
+                <div class="font-bold">Team Snapchat</div>
+                <div class="check-circle"></div>
+            </div>
+            <div class="friend-row rounded-xl mb-1" onclick="toggleFriendSelection(this, 'Best Friend')">
+                <div class="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center"><i class="fa-solid fa-heart text-pink-400"></i></div>
+                <div class="font-bold">Best Friend</div>
+                <div class="check-circle"></div>
+            </div>
+        </div>
+        <div class="p-4 bg-white border-t flex justify-end">
+            <button id="final-send-btn" onclick="finalizeSend()" class="bg-blue-400 text-white px-10 py-3 rounded-full font-bold opacity-50 pointer-events-none transition-all shadow-md">
+                Send <i class="fa-solid fa-paper-plane ml-2"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- VIEWING OVERLAY -->
+    <div id="viewing-overlay">
+        <div class="close-btn" onclick="stopViewing()"><i class="fa-solid fa-xmark"></i></div>
+        <div id="viewing-timer" class="absolute top-8 right-6 text-white font-bold bg-black/40 w-10 h-10 rounded-full flex items-center justify-center">10</div>
+        <img id="viewing-img" src="">
+        <div id="viewing-text-overlay" style="position: absolute; top: 50%; left: 0; width: 100%; background: rgba(0,0,0,0.5); color: white; text-align: center; padding: 10px; font-size: 20px; font-weight: bold; transform: translateY(-50%); pointer-events: none; display: none;"></div>
+    </div>
+
+    <!-- Nav Bar -->
+    <div class="bottom-nav">
+        <div class="nav-item" id="nav-map" onclick="switchTab('map')"><i class="fa-solid fa-location-dot"></i></div>
+        <div class="nav-item" id="nav-chat" onclick="switchTab('chat')"><i class="fa-solid fa-comment"></i></div>
+        <div class="nav-item active" id="nav-camera" onclick="switchTab('camera')"><i class="fa-solid fa-camera"></i></div>
+    </div>
+
+    <canvas id="hidden-canvas" style="display:none"></canvas>
+
+    <script>
+        let map, userMarker;
+        let userLocation = [34.0522, -118.2437];
+        let currentSnapData = null;
+        let selectedFriends = [];
+        let viewTimerInterval;
+        
+        // Simplified message storage: { "Friend Name": [ {text, sender} ] }
+        let conversations = {
+            'Team Snapchat': [{ text: 'Welcome to Snapchat!', sender: 'theirs' }],
+            'Best Friend': []
+        };
+
+        // History handles the list view (last interaction)
+        let chatHistory = [
+            { id: 1, name: 'Team Snapchat', type: 'chat', status: 'received', timestamp: '2h ago' },
+            { id: 2, name: 'Best Friend', type: 'chat', status: 'none', timestamp: '' }
+        ];
+
+        async function initApp() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                document.getElementById('camera-stream').srcObject = stream;
+            } catch (e) { console.warn("Camera access denied"); }
+            initMap();
+            renderChatList();
+        }
+
+        function initMap() {
+            map = L.map('map-container', { zoomControl: false }).setView(userLocation, 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            const ghostIcon = L.divIcon({
+                html: '<div style="background:var(--snap-yellow); width:40px; height:40px; border-radius:12px; border:3px solid white; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,0.3)"><i class="fa-solid fa-ghost"></i></div>',
+                className: 'custom-ghost', iconSize: [40, 40]
+            });
+            userMarker = L.marker(userLocation, { icon: ghostIcon }).addTo(map);
+            if ("geolocation" in navigator) {
+                navigator.geolocation.watchPosition(p => {
+                    userLocation = [p.coords.latitude, p.coords.longitude];
+                    userMarker.setLatLng(userLocation);
+                }, null, { enableHighAccuracy: true });
+            }
+        }
+
+        function recenterMap() { map.flyTo(userLocation, 16); }
+
+        function takePhoto() {
+            const video = document.getElementById('camera-stream');
+            const canvas = document.getElementById('hidden-canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            currentSnapData = {
+                image: canvas.toDataURL('image/png'),
+                text: ""
+            };
+            
+            document.getElementById('preview-img').src = currentSnapData.image;
+            document.getElementById('preview-overlay').style.display = 'block';
+        }
+
+        function closePreview() {
+            document.getElementById('preview-overlay').style.display = 'none';
+            document.getElementById('snap-text-display').style.display = 'none';
+            document.getElementById('snap-text-display').innerText = "";
+            document.getElementById('snap-text-input').value = "";
+        }
+
+        function showTextInput() {
+            document.getElementById('text-input-container').style.display = 'flex';
+            document.getElementById('snap-text-input').focus();
+        }
+
+        function hideTextInput(e) {
+            if (e.target.id === 'text-input-container' || e.key === 'Enter') {
+                const val = document.getElementById('snap-text-input').value;
+                const display = document.getElementById('snap-text-display');
+                if (val.trim()) {
+                    display.innerText = val;
+                    display.style.display = 'block';
+                    currentSnapData.text = val;
+                } else {
+                    display.style.display = 'none';
+                    currentSnapData.text = "";
+                }
+                document.getElementById('text-input-container').style.display = 'none';
+            }
+        }
+
+        document.getElementById('snap-text-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') hideTextInput(e);
+        });
+
+        function showSendToScreen() { document.getElementById('send-to-screen').style.display = 'flex'; }
+        function hideSendToScreen() { document.getElementById('send-to-screen').style.display = 'none'; }
+
+        function toggleFriendSelection(el, name) {
+            el.classList.toggle('selected');
+            if (el.classList.contains('selected')) {
+                selectedFriends.push(name);
+            } else {
+                selectedFriends = selectedFriends.filter(f => f !== name);
+            }
+            const btn = document.getElementById('final-send-btn');
+            if (selectedFriends.length > 0) {
+                btn.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                btn.classList.add('opacity-50', 'pointer-events-none');
+            }
+        }
+
+        function finalizeSend() {
+            selectedFriends.forEach(friend => {
+                chatHistory = chatHistory.filter(c => c.name !== friend);
+                chatHistory.unshift({
+                    id: Date.now() + Math.random(),
+                    name: friend,
+                    type: 'snap',
+                    status: 'sent',
+                    timestamp: 'Just now'
+                });
+            });
+
+            const toast = document.getElementById('toast-sent');
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 2000);
+
+            hideSendToScreen();
+            closePreview();
+            selectedFriends = [];
+            document.querySelectorAll('.friend-row.selected').forEach(r => r.classList.remove('selected'));
+            renderChatList();
+        }
+
+        function renderChatList() {
+            const list = document.getElementById('chat-list');
+            list.innerHTML = '';
+
+            chatHistory.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'p-4 border-b flex items-center gap-4 cursor-pointer active:bg-gray-50';
+                
+                let iconHtml = '';
+                let statusLabel = '';
+                
+                if (item.type === 'snap') {
+                    if (item.status === 'sent') {
+                        iconHtml = `<div class="snap-status-icon icon-sent-snap"></div>`;
+                        statusLabel = 'Sent';
+                    } else {
+                        iconHtml = `<div class="snap-status-icon icon-received-snap"></div>`;
+                        statusLabel = 'New Snap';
+                    }
+                } else {
+                    iconHtml = `<i class="fa-solid fa-comment text-blue-400 mr-2"></i>`;
+                    statusLabel = item.status === 'none' ? 'Tap to chat' : 'Received';
+                }
+
+                row.innerHTML = `
+                    <div class="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center">
+                        <i class="fa-solid fa-user text-gray-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-bold">${item.name}</div>
+                        <div class="flex items-center text-sm text-gray-500 font-medium">
+                            ${iconHtml} ${statusLabel} ${item.timestamp ? '• ' + item.timestamp : ''}
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-gray-200 text-xs"></i>
+                `;
+                
+                row.onclick = () => openConversation(item.name);
+                list.appendChild(row);
+            });
+        }
+
+        function openConversation(name) {
+            document.getElementById('chat-header-name').innerText = name;
+            const container = document.getElementById('message-container');
+            container.innerHTML = '';
+            
+            // Load only messages for this specific friend
+            if (conversations[name]) {
+                conversations[name].forEach(msg => {
+                    const bubble = document.createElement('div');
+                    bubble.className = `chat-bubble ${msg.sender}`;
+                    bubble.innerText = msg.text;
+                    container.appendChild(bubble);
+                });
+            }
+            
+            document.getElementById('conversation-view').classList.remove('hidden');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function closeConversation() {
+            document.getElementById('conversation-view').classList.add('hidden');
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const container = document.getElementById('message-container');
+            const name = document.getElementById('chat-header-name').innerText;
+            
+            if(!input.value.trim()) return;
+
+            // 1. Store the message in the specific friend's conversation list
+            if (!conversations[name]) conversations[name] = [];
+            conversations[name].push({ text: input.value, sender: 'mine' });
+            
+            // 2. Add the bubble to the UI immediately
+            const bubble = document.createElement('div');
+            bubble.className = 'chat-bubble mine';
+            bubble.innerText = input.value;
+            container.appendChild(bubble);
+            
+            // 3. Update the chat history list for the main screen
+            chatHistory = chatHistory.filter(c => c.name !== name);
+            chatHistory.unshift({
+                id: Date.now(),
+                name: name,
+                type: 'chat',
+                status: 'sent',
+                timestamp: 'Just now'
+            });
+
+            input.value = '';
+            container.scrollTop = container.scrollHeight;
+            renderChatList();
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(tab + '-screen').classList.add('active');
+            document.getElementById('nav-' + tab).classList.add('active');
+            if(tab === 'map') setTimeout(() => { map.invalidateSize(); map.setView(userLocation, 15); }, 100);
+            if(tab === 'chat') renderChatList();
+        }
+
+        window.onload = initApp;
+    </script>
+</body>
+</html>
